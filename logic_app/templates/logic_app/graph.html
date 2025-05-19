@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <title>Логический граф</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.24.0/cytoscape.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        table {
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            width: 100%;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+        }
+
+        #cy-container {
+            width: 100%;
+            height: 1600px;
+            overflow: auto;
+            position: relative;
+            border: 1px solid #ddd;
+            margin-top: 30px;
+        }
+
+        #cy {
+            width: 3200px;
+            height: 2000px;
+            position: relative;
+        }
+
+        .level-label {
+            position: absolute;
+            left: -100px;
+            font-size: 16px;
+            color: #b00;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+
+        .node-label {
+            position: absolute;
+            width: 150px;
+            text-align: center;
+            font-size: 12px;
+            line-height: 1.2em;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <h2>Таблица узлов</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Уровень</th>
+                <th>Номер узла</th>
+                <th>Операция</th>
+                <th>Входы</th>
+                <th>Основание СС</th>
+                <th>Результат</th>
+                <th>Двоичный результат</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in table_data %}
+            <tr>
+                <td>{{ row.level }}</td>
+                <td>{{ row.node }}</td>
+                <td>{{ row.operation }}</td>
+                <td>{{ row.inputs }}</td>
+                <td>{{ row.base }}</td>
+                <td>{{ row.result }}</td>
+                <td>{{ row.bin }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <h2>Визуализация DAG</h2>
+    <div id="cy-container">
+        <div id="cy"></div>
+    </div>
+        <script>
+                document.addEventListener("DOMContentLoaded", function () {
+            const cy = cytoscape({
+                container: document.getElementById('cy'),
+                elements: {{ elements|safe }},
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'label': (ele) => `${ele.data('dataLabel') || ''}\n${ele.data('binLabel') || ''}`,
+                            'text-valign': 'bottom',
+                            'text-halign': 'center',
+                            'background-color': '#dff0ff',
+                            'border-width': 2,
+                            'border-color': '#333',
+                            'width': 60,
+                            'height': 60,
+                            'font-size': 12,
+                            'color': '#000',
+                            'text-wrap': 'wrap',
+                            'grab': 'false'
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': 2,
+                            'line-color': '#999',
+                            'target-arrow-color': '#999',
+                            'target-arrow-shape': 'triangle',
+                            'curve-style': 'bezier'
+                        }
+                    }
+                ],
+                layout: { name: 'preset' }
+            });
+
+            const cyContainer = document.getElementById('cy-container');
+
+            // Словарь для сохранения узлов уровней
+            const levels = {};
+            cy.nodes().forEach((node) => {
+                const level = node.data('id').split('_')[0];
+                if (!levels[level]) levels[level] = [];
+                levels[level].push(node);
+            });
+
+            // Создаём текстовые надписи "Уровень" слева от узла
+            const levelLabels = {};
+            Object.keys(levels).sort().forEach((level, idx) => {
+                const firstNode = levels[level][0];
+                const graphPosition = firstNode.position(); // Это неизменные координаты узла
+
+                const levelDiv = document.createElement('div');
+                levelDiv.className = 'level-label';
+                levelDiv.style.position = 'absolute';
+                levelDiv.style.left = '0px';
+                levelDiv.style.top = '0px';
+                levelDiv.style.fontSize = '16px';
+                levelDiv.style.fontWeight = 'bold';
+                levelDiv.style.color = 'black';
+                levelDiv.innerText = `Уровень ${idx}`;
+                cyContainer.appendChild(levelDiv);
+
+                levelLabels[level] = { element: levelDiv, graphPosition }; // Сохраняем элемент и исходную позицию узла
+            });
+
+            // Функция пересчёта позиций при масштабировании и перемещении
+            const updateLevelPositions = () => {
+                const zoom = cy.zoom();
+                const pan = cy.pan();
+
+                Object.keys(levelLabels).forEach((level) => {
+                    const { element, graphPosition } = levelLabels[level];
+
+                    // Пересчитываем экранные координаты текста "Уровень X"
+                    const screenX = graphPosition.x * zoom + pan.x; // Применяем масштаб и панорамирование
+                    const screenY = graphPosition.y * zoom + pan.y;
+
+                    // Смещаем текст немного левее узла
+                    const labelOffsetX = -280; // Смещение влево относительно узла
+                    const labelOffsetY = -10; // Смещение по вертикали (чтобы центрировать)
+
+                    // Устанавливаем позицию текста на экране
+                    element.style.left = `${screenX + labelOffsetX}px`;
+                    element.style.top = `${screenY + labelOffsetY}px`;
+                });
+            };
+
+            // Привязываем обновление позиций к событиям zoom и pan
+            cy.on('zoom pan', () => {
+                updateLevelPositions();
+            });
+
+            // Первоначальное обновление позиций
+            updateLevelPositions();
+
+            // Отключаем перемещение узлов
+            cy.autoungrabify(true);
+        });
+    </script>
+
+</body>
+</html>
